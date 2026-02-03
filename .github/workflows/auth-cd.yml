@@ -1,41 +1,32 @@
-name: Auth Service CD
+name: Auth Service Deployment
 
 on:
   workflow_run:
-    workflows: ["Auth Service CI"] # This waits for the CI to finish
+    workflows: ["Auth Service CI/CD"] # EXACT match to the name above
     types: [completed]
-    branches: [main, feature/ci-setup]
 
 jobs:
-  build-and-push:
-    # Only run if the CI actually passed!
+  deploy-to-gcp:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      # We download the JAR that the CI just created
-      - name: Download JAR from CI
-        uses: actions/download-artifact@v4
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
         with:
-          name: auth-service-jar
-          path: auth-service/target/
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and Push Podman Image
-        run: |
-          # Use the JAR to build the final image
-          podman build -t ghcr.io/${{ github.repository_owner }}/auth-service:latest \
-                       -f auth-service/Dockerfile auth-service
-          podman push ghcr.io/${{ github.repository_owner }}/auth-service:latest
+          service: auth-service
+          image: ghcr.io/${{ github.repository_owner }}/auth-service:latest
+          region: us-central1
+          flags: --allow-unauthenticated
+          env_vars: |
+            SPRING_PROFILES_ACTIVE=prod
+            SPRING_DATASOURCE_URL=jdbc:postgresql:///auth_db?cloudSqlInstance=${{ secrets.GCP_INSTANCE_NAME }}&socketFactory=com.google.cloud.sql.postgres.SocketFactory
+            SPRING_DATASOURCE_USERNAME=${{ secrets.DB_USER }}
+            SPRING_DATASOURCE_PASSWORD=${{ secrets.DB_PASSWORD }}
