@@ -1,0 +1,41 @@
+name: Auth Service CD
+
+on:
+  workflow_run:
+    workflows: ["Auth Service CI"] # This waits for the CI to finish
+    types: [completed]
+    branches: [main, feature/ci-setup]
+
+jobs:
+  build-and-push:
+    # Only run if the CI actually passed!
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      # We download the JAR that the CI just created
+      - name: Download JAR from CI
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-service-jar
+          path: auth-service/target/
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Podman Image
+        run: |
+          # Use the JAR to build the final image
+          podman build -t ghcr.io/${{ github.repository_owner }}/auth-service:latest \
+                       -f auth-service/Dockerfile auth-service
+          podman push ghcr.io/${{ github.repository_owner }}/auth-service:latest
