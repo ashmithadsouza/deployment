@@ -35,5 +35,5 @@ jobs:
         run: |
           cd auth-service
           # This uses the JAR sitting in the target/ folder we just built
-          podman build -t ghcr.io/${{ github.repository_owner }}/auth-service:latest -f Dockerfile .
+          podman build -t ghcr.io/${{ github.repository_owner }}/auth-service:latest -f Containerfile .
           podman push ghcr.io/${{ github.repository_owner }}/auth-service:latest
